@@ -1,0 +1,112 @@
+{
+  "name": "Churn Chart Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "group_by"
+            },
+            {
+              "name": "metric"
+            },
+            {
+              "name": "chart_type"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "422d3c59-a8f5-4d58-b2e8-4d16bc199971",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "5q6Y5XqX1NCWveJa",
+          "mode": "list",
+          "cachedResultName": "telco_customers",
+          "cachedResultUrl": "/projects/ZE3nkPOMtL0QxB8R/datatables/5q6Y5XqX1NCWveJa"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "35aa84c8-22db-4b67-b22f-070ed27dfad8",
+      "name": "Get row(s)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Churn Chart Tool - n8n Code node (Run Once for All Items)\n// Builds a chart from ALL customers so chart numbers always match the data,\n// then returns a QuickChart image URL for the agent to show.\n\nconst GROUPS = [\n  'none', 'gender', 'SeniorCitizen', 'Partner', 'Dependents', 'tenure_group',\n  'PhoneService', 'MultipleLines', 'InternetService', 'OnlineSecurity',\n  'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV',\n  'StreamingMovies', 'Contract', 'PaperlessBilling', 'PaymentMethod'\n];\nconst METRICS = {\n  churn_rate_pct: 'Churn rate (%)',\n  churned: 'Churned customers',\n  customers: 'Customers',\n  monthly_revenue: 'Monthly revenue ($)',\n  churned_monthly_revenue: 'Monthly revenue lost to churn ($)',\n  avg_monthly_charge: 'Average monthly charge ($)'\n};\nconst CHART_TYPES = ['bar', 'horizontalBar', 'pie', 'doughnut'];\n\nconst input = $('When Executed by Another Workflow').first().json;\nconst groupBy = String(input.group_by || 'none').trim();\nconst metric = String(input.metric || 'churn_rate_pct').trim();\nconst chartType = String(input.chart_type || 'bar').trim();\n\nconst errors = [];\nif (!GROUPS.includes(groupBy)) errors.push(`group_by must be one of: ${GROUPS.join(', ')}`);\nif (!METRICS[metric]) errors.push(`metric must be one of: ${Object.keys(METRICS).join(', ')}`);\nif (!CHART_TYPES.includes(chartType)) errors.push(`chart_type must be one of: ${CHART_TYPES.join(', ')}`);\nif (errors.length) return [{ json: { error: errors.join(' | ') } }];\n\nconst TENURE_ORDER = ['0-12 months', '13-24 months', '25-48 months', '49-72 months'];\nfunction tenureGroup(t) {\n  if (t <= 12) return TENURE_ORDER[0];\n  if (t <= 24) return TENURE_ORDER[1];\n  if (t <= 48) return TENURE_ORDER[2];\n  return TENURE_ORDER[3];\n}\nconst round2 = (n) => Math.round(n * 100) / 100;\n\n// 1. Aggregate all customers by the chosen column\nconst groups = {};\nfor (const item of $input.all()) {\n  const c = item.json;\n  let key;\n  if (groupBy === 'none') key = 'All customers';\n  else if (groupBy === 'tenure_group') key = tenureGroup(Number(c.tenure));\n  else key = String(c[groupBy]);\n  if (!groups[key]) groups[key] = { group: key, customers: 0, churned: 0, monthly_revenue: 0, churned_monthly_revenue: 0 };\n  const g = groups[key];\n  const monthly = Number(c.MonthlyCharges) || 0;\n  g.customers += 1;\n  g.monthly_revenue += monthly;\n  if (c.Churn === 'Yes') { g.churned += 1; g.churned_monthly_revenue += monthly; }\n}\n\nlet rows = Object.values(groups).map((g) => ({\n  group: g.group,\n  customers: g.customers,\n  churned: g.churned,\n  churn_rate_pct: round2((g.churned / g.customers) * 100),\n  monthly_revenue: round2(g.monthly_revenue),\n  churned_monthly_revenue: round2(g.churned_monthly_revenue),\n  avg_monthly_charge: round2(g.monthly_revenue / g.customers),\n}));\n\n// 2. Order: tenure buckets in time order, everything else highest first\nif (groupBy === 'tenure_group') rows.sort((a, b) => TENURE_ORDER.indexOf(a.group) - TENURE_ORDER.indexOf(b.group));\nelse rows.sort((a, b) => b[metric] - a[metric]);\n\n// 3. Build the Chart.js config (QuickChart uses Chart.js v2 by default)\nconst isPie = chartType === 'pie' || chartType === 'doughnut';\nconst title = `${METRICS[metric]} by ${groupBy === 'none' ? 'all customers' : groupBy}`;\nconst palette = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2'];\nconst config = {\n  type: chartType,\n  data: {\n    labels: rows.map((r) => r.group),\n    datasets: [{\n      label: METRICS[metric],\n      data: rows.map((r) => r[metric]),\n      backgroundColor: isPie ? rows.map((_, i) => palette[i % palette.length]) : '#2563eb',\n    }],\n  },\n  options: {\n    title: { display: true, text: title },\n    legend: { display: isPie },\n    plugins: { datalabels: { display: true, color: isPie ? '#ffffff' : '#111111', anchor: isPie ? 'center' : 'end', align: isPie ? 'center' : 'end' } },\n  },\n};\n\nconst chartUrl = 'https://quickchart.io/chart?w=700&h=400&bkg=white&c=' + encodeURIComponent(JSON.stringify(config));\n\nreturn [{ json: { title, group_by: groupBy, metric, chart_type: chartType, chart_url: chartUrl, data: rows.map((r) => ({ group: r.group, value: r[metric] })) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "b46f6cc2-0aaf-4e6a-a647-13e402f05574",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "group_by": "Contract",
+          "metric": "churn_rate_pct",
+          "chart_type": "bar"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "89e53002-c5e3-49c6-9ad0-2d3c4240c077",
+  "meta": {
+    "instanceId": "67997c8150d5508ed311a5ddfe0baf21091a8b295e2d4bde4a05d9bbcf431862"
+  },
+  "nodeGroups": [],
+  "id": "rcboM6xXyQWDR20Z",
+  "tags": []
+}

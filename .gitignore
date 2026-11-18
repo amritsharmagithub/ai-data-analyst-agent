@@ -1,0 +1,15 @@
+# Data - never commit
+data/
+
+# Node / n8n
+node_modules/
+.n8n/
+*.log
+
+# Secrets and local settings
+.env
+.venv/
+.user.yml
+
+# macOS
+.DS_Store

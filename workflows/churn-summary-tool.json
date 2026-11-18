@@ -1,0 +1,104 @@
+{
+  "name": "Churn Summary Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "group_by"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "77c29156-aa82-4776-9b2f-f11df78159f8",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "5q6Y5XqX1NCWveJa",
+          "mode": "list",
+          "cachedResultName": "telco_customers",
+          "cachedResultUrl": "/projects/ZE3nkPOMtL0QxB8R/datatables/5q6Y5XqX1NCWveJa"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "547cf0d2-2dce-4569-b26d-71c6e7c1be1d",
+      "name": "Get row(s)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Churn Summary Tool - n8n Code node (Run Once for All Items)\n// Groups all customers by one column and returns churn and revenue metrics,\n// plus each group's share of company totals (calculated here, not by the AI model).\n\nconst ALLOWED = [\n  'none', 'gender', 'SeniorCitizen', 'Partner', 'Dependents', 'tenure_group',\n  'PhoneService', 'MultipleLines', 'InternetService', 'OnlineSecurity',\n  'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV',\n  'StreamingMovies', 'Contract', 'PaperlessBilling', 'PaymentMethod'\n];\n\nconst groupBy = String($('When Executed by Another Workflow').first().json.group_by || 'none').trim();\n\nif (!ALLOWED.includes(groupBy)) {\n  return [{ json: { error: `Unsupported group_by \"${groupBy}\". Use one of: ${ALLOWED.join(', ')}` } }];\n}\n\nfunction tenureGroup(t) {\n  if (t <= 12) return '0-12 months';\n  if (t <= 24) return '13-24 months';\n  if (t <= 48) return '25-48 months';\n  return '49-72 months';\n}\n\nconst round2 = (n) => Math.round(n * 100) / 100;\nconst groups = {};\n\nfor (const item of $input.all()) {\n  const c = item.json;\n  let key;\n  if (groupBy === 'none') key = 'All customers';\n  else if (groupBy === 'tenure_group') key = tenureGroup(Number(c.tenure));\n  else key = String(c[groupBy]);\n\n  if (!groups[key]) {\n    groups[key] = { group: key, customers: 0, churned: 0, monthly_revenue: 0, churned_monthly_revenue: 0, total_charges: 0 };\n  }\n  const g = groups[key];\n  const monthly = Number(c.MonthlyCharges) || 0;\n  g.customers += 1;\n  g.monthly_revenue += monthly;\n  g.total_charges += Number(c.TotalCharges) || 0;\n  if (c.Churn === 'Yes') {\n    g.churned += 1;\n    g.churned_monthly_revenue += monthly;\n  }\n}\n\n// Company totals, so shares are calculated in code (not by the AI model)\nconst all = Object.values(groups);\nconst totalCustomers = all.reduce((s, g) => s + g.customers, 0);\nconst totalChurned = all.reduce((s, g) => s + g.churned, 0);\nconst totalMonthly = all.reduce((s, g) => s + g.monthly_revenue, 0);\nconst totalChurnedMonthly = all.reduce((s, g) => s + g.churned_monthly_revenue, 0);\nconst pct = (part, whole) => (whole ? round2((part / whole) * 100) : 0);\n\nconst rows = all.map((g) => ({\n  group: g.group,\n  customers: g.customers,\n  churned: g.churned,\n  churn_rate_pct: round2((g.churned / g.customers) * 100),\n  monthly_revenue: round2(g.monthly_revenue),\n  churned_monthly_revenue: round2(g.churned_monthly_revenue),\n  avg_monthly_charge: round2(g.monthly_revenue / g.customers),\n  total_charges: round2(g.total_charges),\n  pct_of_customers: pct(g.customers, totalCustomers),\n  pct_of_churned_customers: pct(g.churned, totalChurned),\n  pct_of_monthly_revenue: pct(g.monthly_revenue, totalMonthly),\n  pct_of_churned_revenue: pct(g.churned_monthly_revenue, totalChurnedMonthly),\n})).sort((a, b) => b.churn_rate_pct - a.churn_rate_pct);\n\nconst totals = {\n  customers: totalCustomers,\n  churned: totalChurned,\n  churn_rate_pct: pct(totalChurned, totalCustomers),\n  monthly_revenue: round2(totalMonthly),\n  churned_monthly_revenue: round2(totalChurnedMonthly),\n  churned_revenue_pct_of_monthly_revenue: pct(totalChurnedMonthly, totalMonthly),\n  annualized_churned_revenue: round2(totalChurnedMonthly * 12),\n};\n\nreturn [{ json: { group_by: groupBy, totals, rows } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "ad644d38-fc64-4f5a-80bd-3b2aded55a73",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "group_by": "Contract"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e6fe0940-0fbe-4232-8700-8620519ef3d0",
+  "meta": {
+    "instanceId": "67997c8150d5508ed311a5ddfe0baf21091a8b295e2d4bde4a05d9bbcf431862"
+  },
+  "nodeGroups": [],
+  "id": "kHR3CDGqFm9r9VBL",
+  "tags": []
+}

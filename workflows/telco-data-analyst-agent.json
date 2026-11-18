@@ -1,0 +1,290 @@
+{
+  "name": "Telco Data Analyst Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "861d0cc6-ed8d-43a8-a6fd-bbb277367dfb",
+      "name": "When chat message received",
+      "webhookId": "ae8ee97e-232d-4653-9e04-f7a2aeef69a2"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are a senior revenue and churn analyst for a telecom company. You answer questions about the company's 7,043 customers using ONLY the tools provided.\n\nSTRICT RULES (follow these before anything else)\n1. Use only numbers returned by your tools. Never use your own general knowledge, industry benchmarks, competitor figures, market averages, or typical rates, even if the user asks for them.\n2. If the user asks for a comparison to the industry, benchmarks, competitors, or anything outside this dataset, reply with our own figure from the tools, then say exactly: \"I don't have industry or benchmark data in my tools, so I can't make that comparison.\" Do not give any outside numbers or ranges.\n3. If the tools cannot answer a question, say so plainly and say what data would be needed.\n4. When you calculate anything from tool results (a share, ratio, difference, or annualized amount), show the calculation, for example: $139,130.85 x 12 = $1,669,570.20.\n5. Do not give recommendations unless the user asks for them.\n6. Style: no emojis, no greetings or praise such as \"Great question\". Lead with the direct answer in one sentence, then a small table if helpful, then at most 3 short takeaways.\n7. Format money as $X,XXX.XX and rates as percentages with 2 decimals.\n8. Every rate or total applies only to the exact group the tool returned it for. Never state a number for a combination of groups (for example \"month-to-month AND 0-12 months\") unless a tool calculated that exact combination. If asked, say the combination needs a two-level breakdown.\n9. Charts: when the user asks for a chart, use the Churn Chart Tool. Show the chart as a markdown image on its own line, exactly like this: ![chart title](chart_url). Never change or shorten chart_url. Under the chart, list the values from the tool's data field. Never draw charts yourself and never create chart links by hand.\n10. Reports: when the user asks for a report or summary for leadership, call the Churn Summary Tool for overall totals (group_by \"none\") and for each breakdown you include, and add at least one chart. Use exactly these sections:\n## Executive summary (3 sentences maximum)\n## Key figures (a table with customers, churned, churn rate, monthly revenue lost)\n## Analysis (one short subsection per breakdown, each with its numbers)\n## Conclusions (at most 3 bullet points, based only on the figures above)\nRule 5 still applies: add recommendations only if the user asks for them.\n11. Calculations and wording: never divide, multiply, or sum numbers yourself when a tool field already has the answer. Use the tool's totals block (customers, churned, churn_rate_pct, monthly_revenue, churned_monthly_revenue, churned_revenue_pct_of_monthly_revenue, annualized_churned_revenue) and each row's pct_of_customers, pct_of_churned_customers, pct_of_monthly_revenue, and pct_of_churned_revenue. This data is a single snapshot, so describe a churn rate as \"X% of customers in this group have churned\"; never say customers \"churn before\" a point in time, and never call a factor a \"predictor\" or a cause.\n\nTOOLS\n- Churn Summary Tool: use for any total, count, average, rate, or revenue question across many customers. Use group_by \"none\" for overall totals and \"tenure_group\" for tenure questions.\n- Data table lookup: use only to look up specific customers or a few matching rows. It returns at most 50 rows, so never use it to calculate totals or rates.\n\nDATA\nTable: telco_customers, one row per customer.\nColumns: customerID, gender, SeniorCitizen (0 or 1), Partner, Dependents, tenure (months), PhoneService, MultipleLines, InternetService, OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies, Contract (Month-to-month, One year, Two year), PaperlessBilling, PaymentMethod (Electronic check, Mailed check, Bank transfer (automatic), Credit card (automatic)), MonthlyCharges, TotalCharges, Churn (Yes or No).\nRevenue terms: monthly_revenue is current monthly recurring revenue; churned_monthly_revenue is the monthly revenue lost to churned customers.\nNote: 11 brand-new customers (tenure 0) have TotalCharges = 0 because they have not been billed yet."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "90509953-565d-47c7-ab94-946fd85499a2",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4.6"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        96,
+        208
+      ],
+      "id": "744e9e7a-8592-4d37-a597-d93db39e69ac",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "cDrgki8XXmogIYW7",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        208
+      ],
+      "id": "e46cac4e-8a25-401c-9920-8f643130caa1",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "5q6Y5XqX1NCWveJa",
+          "mode": "list",
+          "cachedResultName": "telco_customers",
+          "cachedResultUrl": "/projects/ZE3nkPOMtL0QxB8R/datatables/5q6Y5XqX1NCWveJa"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "={{ $fromAI('filter_column', 'Exact column name to filter on. One of: customerID, gender, SeniorCitizen, Partner, Dependents, tenure, PhoneService, MultipleLines, InternetService, OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies, Contract, PaperlessBilling, PaymentMethod, MonthlyCharges, TotalCharges, Churn', 'string') }}",
+              "keyValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('conditions0_Value', `The exact value to match in the chosen column, for example: Month-to-month, Electronic check, Yes, No, or a customer ID like 7590-VHVEG. Text values are case-sensitive.`, 'string') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTableTool",
+      "typeVersion": 1.1,
+      "position": [
+        384,
+        208
+      ],
+      "id": "3946d690-210b-43ad-9644-166a412e06c7",
+      "name": "Get row(s) in Data table"
+    },
+    {
+      "parameters": {
+        "description": "Use this tool for any question about totals, counts, averages, churn rates, or revenue across many customers. It reads all 7,043 customers and returns, for each group: customers, churned, churn_rate_pct, monthly_revenue, churned_monthly_revenue (monthly revenue lost to churn), avg_monthly_charge and total_charges. Input group_by must be one of: none (overall totals), gender, SeniorCitizen, Partner, Dependents, tenure_group, PhoneService, MultipleLines, InternetService, OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies, Contract, PaperlessBilling, PaymentMethod.",
+        "workflowId": {
+          "__rl": true,
+          "value": "kHR3CDGqFm9r9VBL",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/kHR3CDGqFm9r9VBL",
+          "cachedResultName": "Churn Summary Tool"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "group_by": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('group_by', ``, 'string') }}"
+          },
+          "matchingColumns": [
+            "group_by"
+          ],
+          "schema": [
+            {
+              "id": "group_by",
+              "displayName": "group_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        304
+      ],
+      "id": "b91f35ee-6823-451e-820a-a833bbb9e338",
+      "name": "Call 'Churn Summary Tool'"
+    },
+    {
+      "parameters": {
+        "description": "Use this tool when the user asks for a chart, graph, plot, or visual. It calculates the values from all 7,043 customers and returns chart_url (an image link), title, and data. Inputs: group_by (one of: none, gender, SeniorCitizen, Partner, Dependents, tenure_group, PhoneService, MultipleLines, InternetService, OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies, Contract, PaperlessBilling, PaymentMethod); metric (one of: churn_rate_pct, churned, customers, monthly_revenue, churned_monthly_revenue, avg_monthly_charge); chart_type (one of: bar, horizontalBar, pie, doughnut). Use pie or doughnut only for counts or revenue, never for churn_rate_pct.",
+        "workflowId": {
+          "__rl": true,
+          "value": "rcboM6xXyQWDR20Z",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/rcboM6xXyQWDR20Z",
+          "cachedResultName": "Churn Chart Tool"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "group_by": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('group_by', ``, 'string') }}",
+            "metric": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('metric', ``, 'string') }}",
+            "chart_type": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('chart_type', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "group_by",
+              "displayName": "group_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "metric",
+              "displayName": "metric",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "chart_type",
+              "displayName": "chart_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        576,
+        320
+      ],
+      "id": "4cfea58d-6c0d-41d5-a611-d082dc51b03a",
+      "name": "Call 'Churn Chart Tool'"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in Data table": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Churn Summary Tool'": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Churn Chart Tool'": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b3093a5e-b1cd-400d-b582-b7a7e7129619",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "67997c8150d5508ed311a5ddfe0baf21091a8b295e2d4bde4a05d9bbcf431862"
+  },
+  "nodeGroups": [],
+  "id": "DzVxMo85oAB8LGSK",
+  "tags": []
+}
